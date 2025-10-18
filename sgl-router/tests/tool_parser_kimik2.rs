@@ -1,9 +1,6 @@
 //! Kimi K2 Parser Integration Tests
 
-use sglang_router_rs::tool_parser::{KimiK2Parser, ToolParser};
-
-mod common;
-use common::create_test_tools;
+use sglang_router_rs::tool_parser::{KimiK2Parser, ParseState, StreamResult, ToolParser};
 
 #[tokio::test]
 async fn test_kimik2_complete_parsing() {
@@ -61,9 +58,8 @@ async fn test_kimik2_with_whitespace() {
 
 #[tokio::test]
 async fn test_kimik2_streaming() {
-    let tools = create_test_tools();
-
-    let mut parser = KimiK2Parser::new();
+    let parser = KimiK2Parser::new();
+    let mut state = ParseState::new();
 
     // Simulate streaming chunks
     let chunks = vec![
@@ -78,19 +74,25 @@ async fn test_kimik2_streaming() {
     ];
 
     let mut found_name = false;
+    let mut found_complete = false;
 
     for chunk in chunks {
-        let result = parser.parse_incremental(chunk, &tools).await.unwrap();
+        let result = parser.parse_incremental(chunk, &mut state).await.unwrap();
 
-        for call in result.calls {
-            if let Some(name) = call.name {
+        match result {
+            StreamResult::ToolName { name, .. } => {
                 assert_eq!(name, "calculate");
                 found_name = true;
             }
+            StreamResult::ToolComplete(tool) => {
+                assert_eq!(tool.function.name, "calculate");
+                found_complete = true;
+            }
+            _ => {}
         }
     }
 
-    assert!(found_name, "Should have found tool name during streaming");
+    assert!(found_name || found_complete);
 }
 
 #[test]
@@ -98,13 +100,14 @@ fn test_kimik2_format_detection() {
     let parser = KimiK2Parser::new();
 
     // Should detect Kimi K2 format
-    assert!(parser.has_tool_markers("<|tool_calls_section_begin|>"));
-    assert!(parser.has_tool_markers("text with <|tool_calls_section_begin|> marker"));
+    assert!(parser.detect_format("<|tool_calls_section_begin|>"));
+    assert!(parser.detect_format("<|tool_call_begin|>"));
+    assert!(parser.detect_format("text with <|tool_calls_section_begin|> marker"));
 
     // Should not detect other formats
-    assert!(!parser.has_tool_markers("[TOOL_CALLS]"));
-    assert!(!parser.has_tool_markers("<tool_call>"));
-    assert!(!parser.has_tool_markers("plain text"));
+    assert!(!parser.detect_format("[TOOL_CALLS]"));
+    assert!(!parser.detect_format("<tool_call>"));
+    assert!(!parser.detect_format("plain text"));
 }
 
 #[tokio::test]
@@ -153,5 +156,5 @@ async fn test_namespace_extraction() {
 
     let (_normal_text, tools) = parser.parse_complete(input).await.unwrap();
     assert_eq!(tools.len(), 1);
-    assert_eq!(tools[0].function.name, "api.tools.search"); // Includes full namespace
+    assert_eq!(tools[0].function.name, "search"); // Should extract after last dot
 }

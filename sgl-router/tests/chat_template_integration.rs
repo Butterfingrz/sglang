@@ -1,12 +1,7 @@
-use sglang_router_rs::{
-    protocols::{
-        chat::{ChatMessage, UserMessageContent},
-        common::{ContentPart, ImageUrl},
-    },
-    tokenizer::chat_template::{
-        detect_chat_template_content_format, ChatTemplateContentFormat, ChatTemplateParams,
-        ChatTemplateProcessor,
-    },
+use sglang_router_rs::protocols::spec;
+use sglang_router_rs::tokenizer::chat_template::{
+    detect_chat_template_content_format, ChatTemplateContentFormat, ChatTemplateParams,
+    ChatTemplateProcessor,
 };
 
 #[test]
@@ -22,8 +17,9 @@ fn test_simple_chat_template() {
 
     let processor = ChatTemplateProcessor::new(template.to_string());
 
-    let messages = [ChatMessage::User {
-        content: UserMessageContent::Text("Test".to_string()),
+    let messages = [spec::ChatMessage::User {
+        role: "user".to_string(),
+        content: spec::UserMessageContent::Text("Test".to_string()),
         name: None,
     }];
 
@@ -56,8 +52,9 @@ fn test_chat_template_with_tokens() {
 
     let processor = ChatTemplateProcessor::new(template.to_string());
 
-    let messages = [ChatMessage::User {
-        content: UserMessageContent::Text("Test".to_string()),
+    let messages = [spec::ChatMessage::User {
+        role: "user".to_string(),
+        content: spec::UserMessageContent::Text("Test".to_string()),
         name: None,
     }];
 
@@ -116,13 +113,15 @@ fn test_llama_style_template() {
 
     let processor = ChatTemplateProcessor::new(template.to_string());
 
-    let messages = [
-        ChatMessage::System {
+    let messages = vec![
+        spec::ChatMessage::System {
+            role: "system".to_string(),
             content: "You are a helpful assistant".to_string(),
             name: None,
         },
-        ChatMessage::User {
-            content: UserMessageContent::Text("What is 2+2?".to_string()),
+        spec::ChatMessage::User {
+            role: "user".to_string(),
+            content: spec::UserMessageContent::Text("What is 2+2?".to_string()),
             name: None,
         },
     ];
@@ -172,18 +171,22 @@ fn test_chatml_template() {
     let processor = ChatTemplateProcessor::new(template.to_string());
 
     let messages = vec![
-        ChatMessage::User {
-            content: UserMessageContent::Text("Hello".to_string()),
+        spec::ChatMessage::User {
+            role: "user".to_string(),
+            content: spec::UserMessageContent::Text("Hello".to_string()),
             name: None,
         },
-        ChatMessage::Assistant {
+        spec::ChatMessage::Assistant {
+            role: "assistant".to_string(),
             content: Some("Hi there!".to_string()),
             name: None,
             tool_calls: None,
+            function_call: None,
             reasoning_content: None,
         },
-        ChatMessage::User {
-            content: UserMessageContent::Text("How are you?".to_string()),
+        spec::ChatMessage::User {
+            role: "user".to_string(),
+            content: spec::UserMessageContent::Text("How are you?".to_string()),
             name: None,
         },
     ];
@@ -224,8 +227,9 @@ assistant:
 
     let processor = ChatTemplateProcessor::new(template.to_string());
 
-    let messages = [ChatMessage::User {
-        content: UserMessageContent::Text("Test".to_string()),
+    let messages = [spec::ChatMessage::User {
+        role: "user".to_string(),
+        content: spec::UserMessageContent::Text("Test".to_string()),
         name: None,
     }];
 
@@ -311,13 +315,14 @@ fn test_template_with_multimodal_content() {
 
     let processor = ChatTemplateProcessor::new(template.to_string());
 
-    let messages = [ChatMessage::User {
-        content: UserMessageContent::Parts(vec![
-            ContentPart::Text {
+    let messages = [spec::ChatMessage::User {
+        role: "user".to_string(),
+        content: spec::UserMessageContent::Parts(vec![
+            spec::ContentPart::Text {
                 text: "Look at this:".to_string(),
             },
-            ContentPart::ImageUrl {
-                image_url: ImageUrl {
+            spec::ContentPart::ImageUrl {
+                image_url: spec::ImageUrl {
                     url: "https://example.com/image.jpg".to_string(),
                     detail: None,
                 },

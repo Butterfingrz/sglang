@@ -68,9 +68,8 @@ impl From<reqwest::Error> for WorkerError {
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
-
     use super::*;
+    use std::error::Error;
 
     #[test]
     fn test_health_check_failed_display() {

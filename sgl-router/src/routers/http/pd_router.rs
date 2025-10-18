@@ -1,5 +1,16 @@
-use std::{sync::Arc, time::Instant};
-
+use super::pd_types::api_path;
+use crate::config::types::RetryConfig;
+use crate::core::{
+    is_retryable_status, RetryExecutor, Worker, WorkerLoadGuard, WorkerRegistry, WorkerType,
+};
+use crate::metrics::RouterMetrics;
+use crate::policies::{LoadBalancingPolicy, PolicyRegistry};
+use crate::protocols::spec::{
+    ChatCompletionRequest, ChatMessage, CompletionRequest, GenerateRequest, RerankRequest,
+    ResponsesGetParams, ResponsesRequest, StringOrArray, UserMessageContent,
+};
+use crate::routers::header_utils;
+use crate::routers::RouterTrait;
 use async_trait::async_trait;
 use axum::{
     body::Body,
@@ -11,28 +22,10 @@ use futures_util::StreamExt;
 use reqwest::Client;
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::sync::Arc;
+use std::time::Instant;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{debug, error, warn};
-
-use super::pd_types::api_path;
-use crate::{
-    config::types::RetryConfig,
-    core::{
-        is_retryable_status, RetryExecutor, Worker, WorkerLoadGuard, WorkerRegistry, WorkerType,
-    },
-    metrics::RouterMetrics,
-    policies::{LoadBalancingPolicy, PolicyRegistry},
-    protocols::{
-        chat::{ChatCompletionRequest, ChatMessage, UserMessageContent},
-        common::{InputIds, StringOrArray},
-        completion::CompletionRequest,
-        embedding::EmbeddingRequest,
-        generate::GenerateRequest,
-        rerank::RerankRequest,
-        responses::{ResponsesGetParams, ResponsesRequest},
-    },
-    routers::{header_utils, RouterTrait},
-};
 
 #[derive(Debug)]
 pub struct PDRouter {
@@ -95,7 +88,7 @@ impl PDRouter {
 
                 match res.bytes().await {
                     Ok(body) => {
-                        let mut response = Response::new(Body::from(body));
+                        let mut response = Response::new(axum::body::Body::from(body));
                         *response.status_mut() = StatusCode::OK;
                         *response.headers_mut() = response_headers;
                         response
@@ -157,10 +150,14 @@ impl PDRouter {
     }
 
     fn get_generate_batch_size(req: &GenerateRequest) -> Option<usize> {
-        // GenerateRequest doesn't support batch via arrays, only via input_ids
-        if let Some(InputIds::Batch(batches)) = &req.input_ids {
-            if !batches.is_empty() {
-                return Some(batches.len());
+        if let Some(StringOrArray::Array(arr)) = &req.prompt {
+            if !arr.is_empty() {
+                return Some(arr.len());
+            }
+        }
+        if let Some(text) = &req.text {
+            if text.contains("[") && text.contains("]") {
+                return None;
             }
         }
         None
@@ -189,6 +186,12 @@ impl PDRouter {
         prefill_worker: &dyn Worker,
         batch_size: Option<usize>,
     ) -> Result<Value, String> {
+        let bootstrap_port = match prefill_worker.worker_type() {
+            crate::core::WorkerType::Prefill { bootstrap_port } => bootstrap_port,
+            _ => None,
+        };
+        let hostname = super::pd_types::get_hostname(prefill_worker.url());
+
         let obj = original
             .as_object_mut()
             .ok_or_else(|| "Request must be a JSON object".to_string())?;
@@ -198,13 +201,13 @@ impl PDRouter {
             let mut ports = Vec::with_capacity(n);
             let mut rooms = Vec::with_capacity(n);
             for _ in 0..n {
-                hosts.push(prefill_worker.bootstrap_host());
-                ports.push(prefill_worker.bootstrap_port());
+                hosts.push(hostname.clone());
+                ports.push(bootstrap_port);
                 rooms.push(super::pd_types::generate_room_id());
             }
             obj.insert(
                 "bootstrap_host".to_string(),
-                Value::Array(hosts.into_iter().map(Value::from).collect()),
+                Value::Array(hosts.into_iter().map(serde_json::Value::from).collect()),
             );
             obj.insert(
                 "bootstrap_port".to_string(),
@@ -212,7 +215,7 @@ impl PDRouter {
                     ports
                         .into_iter()
                         .map(|p| match p {
-                            Some(v) => Value::from(v),
+                            Some(v) => serde_json::Value::from(v),
                             None => Value::Null,
                         })
                         .collect(),
@@ -220,23 +223,23 @@ impl PDRouter {
             );
             obj.insert(
                 "bootstrap_room".to_string(),
-                Value::Array(rooms.into_iter().map(Value::from).collect()),
+                Value::Array(rooms.into_iter().map(serde_json::Value::from).collect()),
             );
         } else {
             obj.insert(
                 "bootstrap_host".to_string(),
-                Value::from(prefill_worker.bootstrap_host()),
+                serde_json::Value::from(hostname),
             );
             obj.insert(
                 "bootstrap_port".to_string(),
-                match prefill_worker.bootstrap_port() {
-                    Some(v) => Value::from(v),
+                match bootstrap_port {
+                    Some(v) => serde_json::Value::from(v),
                     None => Value::Null,
                 },
             );
             obj.insert(
                 "bootstrap_room".to_string(),
-                Value::from(super::pd_types::generate_room_id()),
+                serde_json::Value::from(super::pd_types::generate_room_id()),
             );
         }
         Ok(original)
@@ -511,7 +514,8 @@ impl PDRouter {
 
                         match res.bytes().await {
                             Ok(decode_body) => {
-                                let mut response = Response::new(Body::from(decode_body));
+                                let mut response =
+                                    Response::new(axum::body::Body::from(decode_body));
                                 *response.status_mut() = status;
                                 *response.headers_mut() = response_headers;
                                 response
@@ -1064,10 +1068,18 @@ impl RouterTrait for PDRouter {
         model_id: Option<&str>,
     ) -> Response {
         let is_stream = body.stream;
-        let return_logprob = body.return_logprob.unwrap_or(false);
+        let return_logprob = body.return_logprob;
 
         let request_text = if self.policies_need_request_text() {
-            body.text.as_deref().map(|s| s.to_string())
+            body.text
+                .as_deref()
+                .or_else(|| {
+                    body.prompt.as_ref().and_then(|p| match p {
+                        StringOrArray::String(s) => Some(s.as_str()),
+                        StringOrArray::Array(v) => v.first().map(|s| s.as_str()),
+                    })
+                })
+                .map(|s| s.to_string())
         } else {
             None
         };
@@ -1193,7 +1205,7 @@ impl RouterTrait for PDRouter {
     async fn route_embeddings(
         &self,
         _headers: Option<&HeaderMap>,
-        _body: &EmbeddingRequest,
+        _body: &crate::protocols::spec::EmbeddingRequest,
         _model_id: Option<&str>,
     ) -> Response {
         (
@@ -1359,7 +1371,7 @@ mod tests {
         assert_eq!(decode_ref.load(), 0);
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        let stream = UnboundedReceiverStream::new(rx);
+        let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
 
         let _response = router.create_streaming_response(
             stream.map(Ok),

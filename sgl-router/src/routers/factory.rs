@@ -1,18 +1,15 @@
 //! Factory for creating router instances
 
-use std::sync::Arc;
-
+use super::grpc::pd_router::GrpcPDRouter;
+use super::grpc::router::GrpcRouter;
 use super::{
-    grpc::{pd_router::GrpcPDRouter, router::GrpcRouter},
-    http::{pd_router::PDRouter, router::Router},
-    openai::OpenAIRouter,
+    http::{openai_router::OpenAIRouter, pd_router::PDRouter, router::Router},
     RouterTrait,
 };
-use crate::{
-    config::{ConnectionMode, PolicyConfig, RoutingMode},
-    policies::PolicyFactory,
-    server::AppContext,
-};
+use crate::config::{ConnectionMode, PolicyConfig, RoutingMode};
+use crate::policies::PolicyFactory;
+use crate::server::AppContext;
+use std::sync::Arc;
 
 /// Factory for creating router instances based on configuration
 pub struct RouterFactory;
@@ -131,8 +128,6 @@ impl RouterFactory {
             base_url,
             Some(ctx.router_config.circuit_breaker.clone()),
             ctx.response_storage.clone(),
-            ctx.conversation_storage.clone(),
-            ctx.conversation_item_storage.clone(),
         )
         .await?;
 

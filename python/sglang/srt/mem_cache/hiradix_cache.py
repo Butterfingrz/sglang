@@ -44,7 +44,6 @@ class HiRadixCache(RadixCache):
         hicache_storage_prefetch_policy: Optional[str] = "best_effort",
         model_name: Optional[str] = None,
         storage_backend_extra_config: Optional[str] = None,
-        is_eagle: bool = False,
     ):
 
         if hicache_io_backend == "direct":
@@ -53,7 +52,7 @@ class HiRadixCache(RadixCache):
                 logger.warning(
                     "Page first layout is not supported with direct IO backend, switching to page first direct layout"
                 )
-
+        #! 获取设备侧 KV 池
         self.kv_cache = token_to_kv_pool_allocator.get_kvcache()
         if isinstance(self.kv_cache, MHATokenToKVPool):
             self.token_to_kv_pool_host = MHATokenToKVPoolHost(
@@ -84,19 +83,18 @@ class HiRadixCache(RadixCache):
             prefetch_threshold,
             prefetch_timeout_base,
             prefetch_timeout_per_ki_token,
-            hicache_storage_pass_prefix_keys,
         ) = self._parse_storage_backend_extra_config(storage_backend_extra_config)
         self.prefetch_threshold = prefetch_threshold
         self.prefetch_timeout_base = prefetch_timeout_base
         self.prefetch_timeout_per_page = (
             page_size / 1024 * prefetch_timeout_per_ki_token
         )
-        self.hicache_storage_pass_prefix_keys = hicache_storage_pass_prefix_keys
         # TODO: support more timeout check functions
         self.is_prefetch_timeout = self._prefetch_timeout_check_linear_func
         self.prefetch_stop_policy = hicache_storage_prefetch_policy
 
         self.load_cache_event = threading.Event()
+        #! 分层缓存控制器
         self.cache_controller = HiCacheController(
             token_to_kv_pool_allocator,
             self.token_to_kv_pool_host,
@@ -118,7 +116,7 @@ class HiRadixCache(RadixCache):
                 "dp_rank": self.cache_controller.dp_rank,
             }
             self.metrics_collector = StorageMetricsCollector(labels=labels)
-
+        #! 运行时状态结构（追踪字典）
         # record the nodes with ongoing write through
         self.ongoing_write_through = {}
         # record the node segments with ongoing load back
@@ -138,7 +136,6 @@ class HiRadixCache(RadixCache):
             page_size,
             disable=False,
             eviction_policy=eviction_policy,
-            is_eagle=is_eagle,
         )
 
     def _parse_storage_backend_extra_config(
@@ -151,7 +148,7 @@ class HiRadixCache(RadixCache):
             storage_backend_extra_config: JSON string containing extra configuration
 
         Returns:
-            tuple: (extra_config_dict, prefetch_threshold, prefetch_timeout_base, prefetch_timeout_per_ki_token, hicache_storage_pass_prefix_keys)
+            tuple: (extra_config_dict, prefetch_threshold, prefetch_timeout_base, prefetch_timeout_per_ki_token)
         """
         # Parse extra config JSON if provided
         extra_config = {}
@@ -167,9 +164,6 @@ class HiRadixCache(RadixCache):
         prefetch_timeout_per_ki_token = extra_config.pop(
             "prefetch_timeout_per_ki_token", 0.25
         )  # seconds per 1024 tokens
-        hicache_storage_pass_prefix_keys = extra_config.pop(
-            "hicache_storage_pass_prefix_keys", False
-        )
 
         if not isinstance(prefetch_threshold, int):
             raise ValueError(
@@ -189,7 +183,6 @@ class HiRadixCache(RadixCache):
             prefetch_threshold,
             float(prefetch_timeout_base),
             float(prefetch_timeout_per_ki_token),
-            hicache_storage_pass_prefix_keys,
         )
 
     def reset(self):
@@ -226,7 +219,7 @@ class HiRadixCache(RadixCache):
         else:
             logger.warning("Hierarchical cache storage backend is not enabled.")
             return False
-
+    #! hicache的三种写回策略都调用 write_backup 方法
     def write_backup(self, node: TreeNode, write_back=False):
         host_indices = self.cache_controller.write(
             device_indices=node.value,
@@ -251,20 +244,14 @@ class HiRadixCache(RadixCache):
         return len(host_indices)
 
     def write_backup_storage(self, node: TreeNode):
-        prefix_keys = (
-            node.get_prefix_hash_values(node.parent)
-            if self.hicache_storage_pass_prefix_keys
-            else None
-        )
-
         operation_id = self.cache_controller.write_storage(
-            node.host_value, node.key, node.hash_value, prefix_keys
+            node.host_value, node.key, node.hash_value
         )
         self.ongoing_backup[operation_id] = node
         node.protect_host()
-
+    #! 缓存命中 -> 递增hit_count -> 达到阈值 -> 触发write_backup -> 写入 host memory
     def _inc_hit_count(self, node: TreeNode, chunked=False):
-        # skip the hit count update for chunked requests
+        #! skip the hit count update for chunked requests
         if self.cache_controller.write_policy == "write_back" or chunked:
             return
         node.hit_count += 1
@@ -672,7 +659,6 @@ class HiRadixCache(RadixCache):
 
     def match_prefix(self, key: RadixKey, **kwargs):
         empty_value = torch.empty((0,), dtype=torch.int64, device=self.device)
-        key.token_ids = self.key_convert_fn(key.token_ids)
         if self.disable or len(key) == 0:
             return MatchResult(
                 device_indices=empty_value,
@@ -712,7 +698,6 @@ class HiRadixCache(RadixCache):
         last_host_node: TreeNode,
         new_input_tokens: List[int],
         last_hash: Optional[str] = None,
-        prefix_keys: Optional[List[str]] = None,
     ):
         # align the number of fetching tokens to the page size
         prefetch_length = len(new_input_tokens) - (
@@ -736,7 +721,7 @@ class HiRadixCache(RadixCache):
             # no sufficient host memory for prefetch
             return
         operation = self.cache_controller.prefetch(
-            req_id, host_indices, new_input_tokens, last_hash, prefix_keys
+            req_id, host_indices, new_input_tokens, last_hash
         )
         self.ongoing_prefetch[req_id] = (
             last_host_node,
@@ -836,14 +821,8 @@ class HiRadixCache(RadixCache):
         return new_node
 
     def insert(self, key: RadixKey, value=None, chunked=False):
-        key.token_ids = self.key_convert_fn(key.token_ids)
-
         if len(key) == 0:
             return 0
-
-        if self.is_eagle and value is not None:
-            # Make sure the value len equal to the EAGLE bigram key len
-            value = value[: len(key)]
 
         node = self.root_node
         child_key = self.get_child_key_fn(key)

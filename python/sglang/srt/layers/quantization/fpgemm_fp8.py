@@ -11,6 +11,7 @@ from torch.nn.parameter import Parameter
 from sglang.srt.layers.linear import LinearBase
 from sglang.srt.layers.parameter import ChannelQuantScaleParameter, ModelWeightParameter
 from sglang.srt.layers.quantization.base_config import (
+    FusedMoEMethodBase,
     LinearMethodBase,
     QuantizationConfig,
     QuantizeMethodBase,
@@ -27,7 +28,7 @@ from sglang.srt.layers.quantization.marlin_utils_fp8 import (
     prepare_fp8_layer_for_marlin,
 )
 from sglang.srt.layers.quantization.unquant import UnquantizedLinearMethod
-from sglang.srt.layers.quantization.utils import is_layer_skipped
+from sglang.srt.layers.quantization.utils import is_layer_skipped, replace_parameter
 from sglang.srt.utils import get_bool_env_var, is_cuda
 
 _is_cuda = is_cuda()

@@ -1,0 +1,46 @@
+[workspace]
+channels = ["https://repo.prefix.dev/meta-forge", "conda-forge"]
+name = "sglang-infer-deepseek"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = "3.10.*"
+pip = "*"
+uv = "*"
+cuda = "12.9.*"
+
+# [NIXL] POSIX 插件运行依赖：libaio 或 liburing，随便一个满足即可（同时装更稳）
+# 参考 NIXL POSIX 插件 README：POSIX 默认用 libaio，可选用 liburing。:contentReference[oaicite:0]{index=0} :contentReference[oaicite:1]{index=1} :contentReference[oaicite:2]{index=2}
+libaio = "*"
+liburing = "*"
+
+[pypi-dependencies]
+# [NIXL] 官方推荐通过 PyPI 安装 nixl（wheel 内已包含 UCX），满足 SGLang 集成要求“需要 NIXL（>=0.4）且至少有 POSIX 插件”。:contentReference[oaicite:3]{index=3} :contentReference[oaicite:4]{index=4}
+nixl = ">=0.6.1"
+
+
+[tasks.uv_install]
+cmd = "uv pip install --python $CONDA_PREFIX/bin/python 'sglang[all]>=0.5.3rc0'"
+
+[activation.env]
+"TORCH_CUDA_ARCH_LIST" = "9.0"
+"CUDA_HOME" = "$CONDA_PREFIX"
+pytest = "*"
+
+# -----------------------------
+# Test feature and task (pytest)
+# -----------------------------
+[feature.test.dependencies]
+pytest = "*"
+pytest-asyncio = "*"
+
+[feature.test.tasks]
+# Core test command per repository guidelines
+test = "pytest -q test python/sglang/test"
+
+[environments]
+# Activate with: `pixi run -e test test`
+test = { features = ["test"] }

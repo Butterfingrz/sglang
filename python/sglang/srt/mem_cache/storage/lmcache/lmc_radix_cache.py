@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 import torch
 
@@ -217,12 +217,10 @@ class LMCRadixCache(RadixCache):
 
         return base_res
 
-    def cache_finished_req(self, req: "Req", is_insert: bool = True) -> None:  # type: ignore[override]
+    def cache_finished_req(self, req: "Req") -> None:  # type: ignore[override]
         """On request completion, insert device KV into radix and store to LMCache."""
 
-        super().cache_finished_req(req, is_insert=is_insert)
-        if not is_insert:
-            return
+        super().cache_finished_req(req)
 
         token_ids = (req.origin_input_ids + req.output_ids)[:-1]
         kv_indices = self.req_to_token_pool.req_to_token[

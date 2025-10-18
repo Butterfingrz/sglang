@@ -1,10 +1,3 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
-
-use tracing::{debug, info, warn};
-
 /// Policy Registry for managing model-to-policy mappings
 ///
 /// This registry manages the dynamic assignment of load balancing policies to models.
@@ -15,7 +8,11 @@ use super::{
     CacheAwareConfig, CacheAwarePolicy, LoadBalancingPolicy, PowerOfTwoPolicy, RandomPolicy,
     RoundRobinPolicy,
 };
-use crate::{config::types::PolicyConfig, core::Worker};
+use crate::config::types::PolicyConfig;
+use crate::core::Worker;
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+use tracing::{debug, info, warn};
 
 /// Registry for managing model-to-policy mappings
 #[derive(Clone)]

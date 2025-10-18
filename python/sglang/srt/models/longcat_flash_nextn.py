@@ -32,14 +32,17 @@
 
 import concurrent.futures
 import logging
-from typing import Iterable, Optional, Tuple
+import os
+from enum import IntEnum, auto
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 from torch import nn
+from tqdm import tqdm
 
 from sglang.srt.configs import LongcatFlashConfig
 from sglang.srt.eplb.expert_distribution import get_global_expert_distribution_recorder
-from sglang.srt.layers import deep_gemm_wrapper
 from sglang.srt.layers.communicator import LayerCommunicator, LayerScatterModes
 from sglang.srt.layers.dp_attention import (
     get_attention_tp_rank,
@@ -49,6 +52,7 @@ from sglang.srt.layers.dp_attention import (
 from sglang.srt.layers.layernorm import RMSNorm
 from sglang.srt.layers.linear import ReplicatedLinear
 from sglang.srt.layers.logits_processor import LogitsProcessor
+from sglang.srt.layers.quantization import deep_gemm_wrapper
 from sglang.srt.layers.quantization.base_config import QuantizationConfig
 from sglang.srt.layers.quantization.fp8_kernel import is_fp8_fnuz
 from sglang.srt.layers.quantization.fp8_utils import (
@@ -71,6 +75,7 @@ from sglang.srt.models.deepseek_v2 import DeepseekV2AttentionMLA
 from sglang.srt.models.longcat_flash import LongcatFlashForCausalLM, LongcatFlashMLP
 from sglang.srt.utils import (
     BumpAllocator,
+    LazyValue,
     add_prefix,
     bind_or_assign,
     cpu_has_amx_support,
@@ -92,7 +97,13 @@ _is_cpu = is_cpu()
 _device_sm = get_device_sm()
 
 if _is_cuda:
-    from sgl_kernel import awq_dequantize
+    from sgl_kernel import (
+        awq_dequantize,
+        bmm_fp8,
+        dsv3_fused_a_gemm,
+        dsv3_router_gemm,
+        merge_state_v2,
+    )
 elif _is_cpu and _is_cpu_amx_available:
     pass
 elif _is_hip:

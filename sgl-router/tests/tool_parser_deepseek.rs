@@ -1,9 +1,6 @@
 //! DeepSeek V3 Parser Integration Tests
 
-use sglang_router_rs::tool_parser::{DeepSeekParser, ToolParser};
-
-mod common;
-use common::create_test_tools;
+use sglang_router_rs::tool_parser::{DeepSeekParser, ParseState, StreamResult, ToolParser};
 
 #[tokio::test]
 async fn test_deepseek_complete_parsing() {
@@ -49,9 +46,8 @@ async fn test_deepseek_multiple_tools() {
 
 #[tokio::test]
 async fn test_deepseek_streaming() {
-    let tools = create_test_tools();
-
-    let mut parser = DeepSeekParser::new();
+    let parser = DeepSeekParser::new();
+    let mut state = ParseState::new();
 
     // Simulate streaming chunks
     let chunks = vec![
@@ -65,19 +61,25 @@ async fn test_deepseek_streaming() {
     ];
 
     let mut found_name = false;
+    let mut found_complete = false;
 
     for chunk in chunks {
-        let result = parser.parse_incremental(chunk, &tools).await.unwrap();
+        let result = parser.parse_incremental(chunk, &mut state).await.unwrap();
 
-        for call in result.calls {
-            if let Some(name) = call.name {
+        match result {
+            StreamResult::ToolName { name, .. } => {
                 assert_eq!(name, "get_weather");
                 found_name = true;
             }
+            StreamResult::ToolComplete(tool) => {
+                assert_eq!(tool.function.name, "get_weather");
+                found_complete = true;
+            }
+            _ => {}
         }
     }
 
-    assert!(found_name, "Should have found tool name during streaming");
+    assert!(found_name || found_complete);
 }
 
 #[tokio::test]
@@ -108,13 +110,13 @@ fn test_deepseek_format_detection() {
     let parser = DeepSeekParser::new();
 
     // Should detect DeepSeek format
-    assert!(parser.has_tool_markers("<｜tool▁calls▁begin｜>"));
-    assert!(parser.has_tool_markers("text with <｜tool▁calls▁begin｜> marker"));
+    assert!(parser.detect_format("<｜tool▁calls▁begin｜>"));
+    assert!(parser.detect_format("text with <｜tool▁calls▁begin｜> marker"));
 
     // Should not detect other formats
-    assert!(!parser.has_tool_markers("[TOOL_CALLS]"));
-    assert!(!parser.has_tool_markers("<tool_call>"));
-    assert!(!parser.has_tool_markers("plain text"));
+    assert!(!parser.detect_format("[TOOL_CALLS]"));
+    assert!(!parser.detect_format("<tool_call>"));
+    assert!(!parser.detect_format("plain text"));
 }
 
 #[tokio::test]

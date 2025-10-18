@@ -1,11 +1,6 @@
-use std::{
-    sync::{
-        atomic::{AtomicU32, AtomicU64, Ordering},
-        Arc, RwLock,
-    },
-    time::{Duration, Instant},
-};
-
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 use tracing::info;
 
 /// Circuit breaker configuration
@@ -321,9 +316,8 @@ pub struct CircuitBreakerStats {
 
 #[cfg(test)]
 mod tests {
-    use std::thread;
-
     use super::*;
+    use std::thread;
 
     #[test]
     fn test_circuit_breaker_initial_state() {

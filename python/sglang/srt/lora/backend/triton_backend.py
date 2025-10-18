@@ -11,6 +11,7 @@ from sglang.srt.lora.triton_ops import (
 )
 from sglang.srt.lora.utils import LoRABatchInfo
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch
+from sglang.srt.server_args import ServerArgs
 
 
 class TritonLoRABackend(BaseLoRABackend):

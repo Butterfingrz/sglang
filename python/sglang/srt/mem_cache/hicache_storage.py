@@ -36,7 +36,6 @@ class HiCacheStorageConfig:
 
 @dataclass
 class HiCacheStorageExtraInfo:
-    prefix_keys: Optional[List[str]] = (None,)
     extra_info: Optional[dict] = None
 
 
@@ -140,9 +139,7 @@ class HiCacheStorage(ABC):
         pass
 
     # TODO: Use a finer-grained return type (e.g., List[bool])
-    def batch_exists(
-        self, keys: List[str], extra_info: Optional[HiCacheStorageExtraInfo] = None
-    ) -> int:
+    def batch_exists(self, keys: List[str]) -> int:
         """
         Check if the keys exist in the storage.
         return the number of consecutive existing keys from the start.
@@ -175,17 +172,17 @@ class HiCacheFile(HiCacheStorage):
         )
         model_name = "-".join(model_name.split("/")) if model_name else ""
         if is_mla_model:
-            self.config_suffix = f"_{model_name}"
+            self.config_suffix = f"_{model_name}"  #! MLA模型时键不带tp后缀，从而多节点共享同一L3命名空间
         else:
             self.config_suffix = f"_{model_name}_{tp_rank}_{tp_size}"
 
         if not os.path.exists(self.file_path) and tp_rank == 0:
             os.makedirs(self.file_path)
             logger.info(f"Created HiCacheFile storage directory at {self.file_path}")
-
+    #! 对每页tokens用链式哈希生成L3键
     def _get_suffixed_key(self, key: str) -> str:
         return key + self.config_suffix
-
+    #! 从文件系统读取单个 KV cache 页
     def get(
         self,
         key: str,
@@ -231,7 +228,7 @@ class HiCacheFile(HiCacheStorage):
 
         key = self._get_suffixed_key(key)
         tensor_path = os.path.join(self.file_path, f"{key}.bin")
-        try:
+        try:  #!  实际 I/O 操作：写入文件系统
             value.contiguous().view(dtype=torch.uint8).numpy().tofile(tensor_path)
             return True
         except Exception as e:

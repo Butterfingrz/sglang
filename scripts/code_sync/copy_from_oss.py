@@ -46,6 +46,7 @@ folder_names = [
     "python/sglang/lang",
     "python/sglang/srt",
     "python/sglang/test",
+    "python/sglang/__init__.py",
     "python/sglang/utils.py",
     "python/sglang/README.md",
     "sgl-kernel",

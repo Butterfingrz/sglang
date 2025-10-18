@@ -1,10 +1,8 @@
 // src/tokenizer/stream.rs
 
-use std::sync::Arc;
-
-use anyhow::Result;
-
 use super::traits::{self, TokenIdType};
+use anyhow::Result;
+use std::sync::Arc;
 
 const INITIAL_INCREMENTAL_DETOKENIZATION_OFFSET: usize = 5;
 

@@ -1,6 +1,7 @@
 import abc
 import logging
 import threading
+from enum import IntEnum
 from functools import wraps
 from typing import Optional
 
@@ -33,12 +34,12 @@ logger = logging.getLogger(__name__)
 def synchronized(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        with self.lock:
+        with self.lock:   #! 获取实例的锁，
             return func(self, *args, **kwargs)
 
     return wrapper
 
-
+#! 张量原生的内存池分配器，核心思想是将逻辑分配（索引管理）与物理内存（预分配缓冲区）解耦
 class HostKVCache(abc.ABC):
 
     def __init__(
@@ -105,7 +106,7 @@ class HostKVCache(abc.ABC):
     def init_kv_buffer(self):
         raise NotImplementedError()
 
-    @abc.abstractmethod
+    @abc.abstractmethod     #?  可能用在layer_first 和 page_first 布局 
     def load_to_device_per_layer(
         self, device_pool, host_indices, device_indices, layer_id, io_backend
     ) -> None:
@@ -148,14 +149,14 @@ class HostKVCache(abc.ABC):
     @synchronized
     def clear(self):
         # Initialize memory states and tracking structures.
-        self.mem_state = torch.zeros(
+        self.mem_state = torch.zeros(          
             (self.size,), dtype=torch.uint8, device=self.device
-        )
+        )     #! free_slot : 1D 张量，存储所有可用的 token 索引
         self.free_slots = torch.arange(self.size, dtype=torch.int64)
 
     def available_size(self):
         return len(self.free_slots)
-
+    #! 通过 alloc() 方法按页面粒度分配内存 ，返回处理token的索引张量
     @synchronized
     def alloc(self, need_size: int) -> Optional[torch.Tensor]:
         assert (
@@ -163,10 +164,10 @@ class HostKVCache(abc.ABC):
         ), "The requested size should be a multiple of the page size."
         if need_size > self.available_size():
             return None
-
+        #!  分配：从头部切片, 并更新 free_slots
         select_index = self.free_slots[:need_size]
         self.free_slots = self.free_slots[need_size:]
-
+        #!  返回处理token的索引张量
         return select_index
 
     @synchronized
@@ -220,7 +221,7 @@ class MHATokenToKVPoolHost(HostKVCache):
     def get_ksize_per_token(self):
         return self.get_size_per_token() // 2
 
-    def init_kv_buffer(self):
+    def init_kv_buffer(self):  #! 不同的host内存池的布局
         if self.layout == "layer_first":
             dims = (2, self.layer_num, self.size, self.head_num, self.head_dim)
         elif self.layout == "page_first":
@@ -260,7 +261,7 @@ class MHATokenToKVPoolHost(HostKVCache):
         device_indices,
         layer_id,
         io_backend,
-    ):
+    ):  #! CPU <-> GPU 间 kv cache传输配置 
         if io_backend == "kernel":
             if self.layout == "layer_first":
                 transfer_kv_per_layer(

@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
-use serde::{Deserialize, Serialize};
-
 use super::ConfigResult;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Main router configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,14 +38,14 @@ pub struct RouterConfig {
     pub log_level: Option<String>,
     /// Custom request ID headers to check (defaults to common headers)
     pub request_id_headers: Option<Vec<String>>,
-    /// Maximum concurrent requests allowed (for rate limiting). Set to -1 to disable rate limiting.
-    pub max_concurrent_requests: i32,
+    /// Maximum concurrent requests allowed (for rate limiting)
+    pub max_concurrent_requests: usize,
     /// Queue size for pending requests when max concurrent limit reached (0 = no queue, return 429 immediately)
     pub queue_size: usize,
     /// Maximum time (in seconds) a request can wait in queue before timing out
     pub queue_timeout_secs: u64,
     /// Token bucket refill rate (tokens per second). If not set, defaults to max_concurrent_requests
-    pub rate_limit_tokens_per_second: Option<i32>,
+    pub rate_limit_tokens_per_second: Option<usize>,
     /// CORS allowed origins
     pub cors_allowed_origins: Vec<String>,
     /// Retry configuration
@@ -69,18 +67,12 @@ pub struct RouterConfig {
     pub model_path: Option<String>,
     /// Explicit tokenizer path (overrides model_path tokenizer if provided)
     pub tokenizer_path: Option<String>,
-    /// Chat template path (optional)
-    pub chat_template: Option<String>,
     /// History backend configuration (memory or none, default: memory)
     #[serde(default = "default_history_backend")]
     pub history_backend: HistoryBackend,
     /// Oracle history backend configuration (required when `history_backend` = "oracle")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub oracle: Option<OracleConfig>,
-    /// Parser for reasoning models (e.g., deepseek-r1, qwen3)
-    pub reasoning_parser: Option<String>,
-    /// Parser for handling tool-call interactions
-    pub tool_call_parser: Option<String>,
 }
 
 fn default_history_backend() -> HistoryBackend {
@@ -415,7 +407,7 @@ impl Default for MetricsConfig {
     fn default() -> Self {
         Self {
             port: 29000,
-            host: "0.0.0.0".to_string(),
+            host: "127.0.0.1".to_string(),
         }
     }
 }
@@ -427,7 +419,7 @@ impl Default for RouterConfig {
                 worker_urls: vec![],
             },
             policy: PolicyConfig::Random,
-            host: "0.0.0.0".to_string(),
+            host: "127.0.0.1".to_string(),
             port: 3001,
             max_payload_size: 536_870_912, // 512MB
             request_timeout_secs: 1800,    // 30 minutes
@@ -440,7 +432,7 @@ impl Default for RouterConfig {
             log_dir: None,
             log_level: None,
             request_id_headers: None,
-            max_concurrent_requests: -1,
+            max_concurrent_requests: 256,
             queue_size: 100,
             queue_timeout_secs: 60,
             rate_limit_tokens_per_second: None,
@@ -454,11 +446,8 @@ impl Default for RouterConfig {
             connection_mode: ConnectionMode::Http,
             model_path: None,
             tokenizer_path: None,
-            chat_template: None,
             history_backend: default_history_backend(),
             oracle: None,
-            reasoning_parser: None,
-            tool_call_parser: None,
         }
     }
 }
@@ -533,7 +522,7 @@ mod tests {
             matches!(config.mode, RoutingMode::Regular { worker_urls } if worker_urls.is_empty())
         );
         assert!(matches!(config.policy, PolicyConfig::Random));
-        assert_eq!(config.host, "0.0.0.0");
+        assert_eq!(config.host, "127.0.0.1");
         assert_eq!(config.port, 3001);
         assert_eq!(config.max_payload_size, 536_870_912);
         assert_eq!(config.request_timeout_secs, 1800);
@@ -564,7 +553,7 @@ mod tests {
         }
 
         assert!(matches!(config.policy, PolicyConfig::RoundRobin));
-        assert_eq!(config.host, "0.0.0.0");
+        assert_eq!(config.host, "127.0.0.1");
         assert_eq!(config.port, 3001);
     }
 
@@ -811,7 +800,7 @@ mod tests {
         let config = MetricsConfig::default();
 
         assert_eq!(config.port, 29000);
-        assert_eq!(config.host, "0.0.0.0");
+        assert_eq!(config.host, "127.0.0.1");
     }
 
     #[test]
@@ -999,11 +988,8 @@ mod tests {
             connection_mode: ConnectionMode::Http,
             model_path: None,
             tokenizer_path: None,
-            chat_template: None,
             history_backend: default_history_backend(),
             oracle: None,
-            reasoning_parser: None,
-            tool_call_parser: None,
         };
 
         assert!(config.mode.is_pd_mode());
@@ -1067,11 +1053,8 @@ mod tests {
             connection_mode: ConnectionMode::Http,
             model_path: None,
             tokenizer_path: None,
-            chat_template: None,
             history_backend: default_history_backend(),
             oracle: None,
-            reasoning_parser: None,
-            tool_call_parser: None,
         };
 
         assert!(!config.mode.is_pd_mode());
@@ -1131,11 +1114,8 @@ mod tests {
             connection_mode: ConnectionMode::Http,
             model_path: None,
             tokenizer_path: None,
-            chat_template: None,
             history_backend: default_history_backend(),
             oracle: None,
-            reasoning_parser: None,
-            tool_call_parser: None,
         };
 
         assert!(config.has_service_discovery());

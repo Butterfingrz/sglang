@@ -148,7 +148,8 @@ mod tests {
     async fn test_mock_server_with_rmcp_client() {
         let mut server = MockMCPServer::start().await.unwrap();
 
-        use rmcp::{transport::StreamableHttpClientTransport, ServiceExt};
+        use rmcp::transport::StreamableHttpClientTransport;
+        use rmcp::ServiceExt;
 
         let transport = StreamableHttpClientTransport::from_uri(server.url().as_str());
         let client = ().serve(transport).await;

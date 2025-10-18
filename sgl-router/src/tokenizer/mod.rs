@@ -1,6 +1,6 @@
-use std::{ops::Deref, sync::Arc};
-
 use anyhow::Result;
+use std::ops::Deref;
+use std::sync::Arc;
 
 pub mod factory;
 pub mod hub;
@@ -23,16 +23,17 @@ mod tests;
 
 // Re-exports
 pub use factory::{
-    create_tokenizer, create_tokenizer_async, create_tokenizer_async_with_chat_template,
-    create_tokenizer_from_file, create_tokenizer_with_chat_template,
-    create_tokenizer_with_chat_template_blocking, TokenizerType,
+    create_tokenizer, create_tokenizer_async, create_tokenizer_from_file,
+    create_tokenizer_with_chat_template, TokenizerType,
 };
-pub use huggingface::HuggingFaceTokenizer;
 pub use sequence::Sequence;
 pub use stop::{SequenceDecoderOutput, StopSequenceConfig, StopSequenceDecoder};
 pub use stream::DecodeStream;
-pub use tiktoken::{TiktokenModel, TiktokenTokenizer};
 pub use traits::{Decoder, Encoder, Encoding, SpecialTokens, Tokenizer as TokenizerTrait};
+
+pub use huggingface::HuggingFaceTokenizer;
+
+pub use tiktoken::{TiktokenModel, TiktokenTokenizer};
 
 /// Main tokenizer wrapper that provides a unified interface for different tokenizer implementations
 #[derive(Clone)]
@@ -41,7 +42,7 @@ pub struct Tokenizer(Arc<dyn traits::Tokenizer>);
 impl Tokenizer {
     /// Create a tokenizer from a file path
     pub fn from_file(file_path: &str) -> Result<Tokenizer> {
-        Ok(Tokenizer(create_tokenizer_from_file(file_path)?))
+        Ok(Tokenizer(factory::create_tokenizer_from_file(file_path)?))
     }
 
     /// Create a tokenizer from a file path with an optional chat template
@@ -49,7 +50,7 @@ impl Tokenizer {
         file_path: &str,
         chat_template_path: Option<&str>,
     ) -> Result<Tokenizer> {
-        Ok(Tokenizer(create_tokenizer_with_chat_template(
+        Ok(Tokenizer(factory::create_tokenizer_with_chat_template(
             file_path,
             chat_template_path,
         )?))

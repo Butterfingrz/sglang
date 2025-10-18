@@ -1,9 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
-
-use sglang_router_rs::{
-    core::{BasicWorkerBuilder, Worker, WorkerType},
-    policies::{CacheAwareConfig, CacheAwarePolicy, LoadBalancingPolicy},
-};
+use sglang_router_rs::core::{BasicWorkerBuilder, Worker, WorkerType};
+use sglang_router_rs::policies::{CacheAwareConfig, CacheAwarePolicy, LoadBalancingPolicy};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 #[test]
 fn test_backward_compatibility_with_empty_model_id() {

@@ -454,9 +454,7 @@ class HiCacheHF3FS(HiCacheStorage):
         result = self.metadata_client.exists(self.rank, [key])
         return result[0] if result else False
 
-    def batch_exists(
-        self, keys: List[str], extra_info: Optional[HiCacheStorageExtraInfo] = None
-    ) -> int:
+    def batch_exists(self, keys: List[str]) -> int:
         factor = 1
         if self.is_zero_copy and not self.is_mla_model:
             keys = self._get_mha_zero_copy_keys(keys)
@@ -501,12 +499,8 @@ class HiCacheHF3FS(HiCacheStorage):
 
     def register_mem_pool_host(self, mem_pool_host: HostKVCache):
         super().register_mem_pool_host(mem_pool_host)
-        self.is_zero_copy = self.mem_pool_host.layout in [
-            "page_first",
-            "page_first_direct",
-        ]
-
-        logger.info(f"{self.is_zero_copy=}, layout={self.mem_pool_host.layout}")
+        self.is_zero_copy = self.mem_pool_host.layout == "page_first"
+        logger.info(f"{self.is_zero_copy=}")
 
     def _get_mha_zero_copy_keys(self, keys: List[str]) -> List[str]:
         _keys = []
@@ -530,9 +524,7 @@ class HiCacheHF3FS(HiCacheStorage):
         flat = not self.is_zero_copy
         values = (
             [
-                self.mem_pool_host.get_data_page(
-                    host_indices[i * self.mem_pool_host.page_size], flat=flat
-                )
+                self.mem_pool_host.get_data_page(host_indices[i * page_num], flat=flat)
                 for i in range(page_num)
             ]
             if self.is_zero_copy
@@ -582,9 +574,7 @@ class HiCacheHF3FS(HiCacheStorage):
         # host_indices to kv_buffer
         flat = not self.is_zero_copy
         values = [
-            self.mem_pool_host.get_data_page(
-                host_indices[i * self.mem_pool_host.page_size], flat=flat
-            )
+            self.mem_pool_host.get_data_page(host_indices[i * page_num], flat=flat)
             for i in range(page_num)
         ]
 

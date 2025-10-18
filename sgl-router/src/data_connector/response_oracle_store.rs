@@ -1,20 +1,19 @@
-use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
-
+use crate::config::OracleConfig;
+use crate::data_connector::responses::{
+    ResponseChain, ResponseId, ResponseStorage, ResponseStorageError, Result as StorageResult,
+    StoredResponse,
+};
 use async_trait::async_trait;
 use deadpool::managed::{Manager, Metrics, Pool, PoolError, RecycleError, RecycleResult};
 use oracle::{Connection, Row};
 use serde_json::Value;
-
-use crate::{
-    config::OracleConfig,
-    data_connector::responses::{
-        ResponseChain, ResponseId, ResponseStorage, ResponseStorageError, Result as StorageResult,
-        StoredResponse,
-    },
-};
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
 
 const SELECT_BASE: &str = "SELECT id, previous_response_id, input, instructions, output, \
-    tool_calls, metadata, created_at, user_id, model, conversation_id, raw_response FROM responses";
+    tool_calls, metadata, created_at, user_id, model, raw_response FROM responses";
 
 #[derive(Clone)]
 pub struct OracleResponseStorage {
@@ -96,11 +95,8 @@ impl OracleResponseStorage {
         let model: Option<String> = row
             .get(9)
             .map_err(|err| map_oracle_error(err).into_storage_error("fetch model"))?;
-        let conversation_id: Option<String> = row
-            .get(10)
-            .map_err(|err| map_oracle_error(err).into_storage_error("fetch conversation_id"))?;
         let raw_response_json: Option<String> = row
-            .get(11)
+            .get(10)
             .map_err(|err| map_oracle_error(err).into_storage_error("fetch raw_response"))?;
 
         let previous_response_id = previous.map(ResponseId);
@@ -119,7 +115,6 @@ impl OracleResponseStorage {
             created_at,
             user: user_id,
             model,
-            conversation_id,
             raw_response,
         })
     }
@@ -139,7 +134,6 @@ impl ResponseStorage for OracleResponseStorage {
             created_at,
             user,
             model,
-            conversation_id,
             raw_response,
         } = response;
 
@@ -153,8 +147,8 @@ impl ResponseStorage for OracleResponseStorage {
         self.with_connection(move |conn| {
             conn.execute(
                 "INSERT INTO responses (id, previous_response_id, input, instructions, output, \
-                    tool_calls, metadata, created_at, user_id, model, conversation_id, raw_response) \
-                 VALUES (:1, :2, :3, :4, :5, :6, :7, :8, :9, :10, :11, :12)",
+                    tool_calls, metadata, created_at, user_id, model, raw_response) \
+                 VALUES (:1, :2, :3, :4, :5, :6, :7, :8, :9, :10, :11)",
                 &[
                     &response_id_str,
                     &previous_id,
@@ -166,7 +160,6 @@ impl ResponseStorage for OracleResponseStorage {
                     &created_at,
                     &user,
                     &model,
-                    &conversation_id,
                     &json_raw_response,
                 ],
             )
@@ -401,7 +394,6 @@ fn initialize_schema(config: &OracleConfig) -> StorageResult<()> {
         conn.execute(
             "CREATE TABLE responses (
                 id VARCHAR2(64) PRIMARY KEY,
-                conversation_id VARCHAR2(64),
                 previous_response_id VARCHAR2(64),
                 input CLOB,
                 instructions CLOB,
@@ -511,9 +503,8 @@ impl OracleErrorExt for ResponseStorageError {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn parse_tool_calls_handles_empty_input() {

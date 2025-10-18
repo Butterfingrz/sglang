@@ -2,12 +2,11 @@
 
 import os
 import unittest
-from typing import List
+from typing import List, Optional
 from unittest.mock import MagicMock
 
 import torch
 
-from sglang.srt.mem_cache.hicache_storage import HiCacheStorageConfig
 from sglang.srt.mem_cache.storage.nixl.hicache_nixl import HiCacheNixl
 from sglang.srt.mem_cache.storage.nixl.nixl_utils import (
     NixlFileManager,
@@ -21,7 +20,7 @@ class TestNixlUnified(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         # Create test directories
-        self.test_dir = "/tmp/test_nixl_unified"
+        self.test_dir = "/data/private/cyh/sglang_cache/nixl_cache/node0"                             #"/tmp/test_nixl_unified"
         os.makedirs(self.test_dir, exist_ok=True)
 
         # Mock NIXL agent for registration tests
@@ -32,22 +31,8 @@ class TestNixlUnified(unittest.TestCase):
         # Create instances
         self.file_manager = NixlFileManager(self.test_dir)
         self.registration = NixlRegistration(self.mock_agent)
-
-        # Create storage config for testing
-        self.storage_config = HiCacheStorageConfig(
-            tp_rank=0,
-            tp_size=2,
-            is_mla_model=False,
-            is_page_first_layout=False,
-            model_name="test_model",
-        )
-
         try:
-            self.hicache = HiCacheNixl(
-                storage_config=self.storage_config,
-                file_path=self.test_dir,
-                plugin="POSIX",
-            )
+            self.hicache = HiCacheNixl(file_path=self.test_dir, plugin="POSIX")
         except ImportError:
             self.skipTest("NIXL not available, skipping NIXL storage tests")
 

@@ -9,7 +9,6 @@ from sglang.srt.layers.dp_attention import DpPaddingMode, set_dp_buffer_len
 from sglang.srt.model_executor.cuda_graph_runner import (
     CUDA_GRAPH_CAPTURE_FAILED_MSG,
     CudaGraphRunner,
-    DeepEPCudaGraphRunnerAdapter,
     LogitsProcessorOutput,
     get_batch_sizes_to_capture,
     get_global_graph_memory_pool,
@@ -39,12 +38,7 @@ class EAGLEDraftExtendCudaGraphRunner:
     def __init__(self, eagle_worker: EAGLEWorker):
         # Parse args
         self.eagle_worker = eagle_worker
-        if not hasattr(eagle_worker, "model_runner"):
-            # V2: EagleDraftWorker
-            self.model_runner = model_runner = eagle_worker.draft_runner
-        else:
-            self.model_runner = model_runner = eagle_worker.model_runner
-
+        self.model_runner = model_runner = eagle_worker.model_runner
         self.graphs = {}
         self.output_buffers = {}
         self.enable_torch_compile = model_runner.server_args.enable_torch_compile
@@ -62,7 +56,6 @@ class EAGLEDraftExtendCudaGraphRunner:
         )
         self.capture_bs, self.compile_bs = get_batch_sizes_to_capture(model_runner)
         self.padded_static_len = -1
-        self.deepep_adapter = DeepEPCudaGraphRunnerAdapter()
 
         # Attention backend
         self.num_tokens_per_bs = self.speculative_num_steps + 1
@@ -245,8 +238,6 @@ class EAGLEDraftExtendCudaGraphRunner:
         )
         spec_info.positions = None
 
-        self.deepep_adapter.capture(is_extend_in_batch=True)
-
         # Forward batch
         forward_batch = ForwardBatch(
             forward_mode=ForwardMode.DRAFT_EXTEND,
@@ -294,7 +285,7 @@ class EAGLEDraftExtendCudaGraphRunner:
             output_cache_loc_backup = forward_batch.out_cache_loc
             hidden_states_backup = forward_batch.spec_info.hidden_states
 
-            ret = self.model_runner.model.forward(
+            ret = self.eagle_worker.draft_model_runner.model.forward(
                 forward_batch.input_ids,
                 forward_batch.positions,
                 forward_batch,
@@ -322,8 +313,6 @@ class EAGLEDraftExtendCudaGraphRunner:
 
     def replay(self, forward_batch: ForwardBatch):
         assert forward_batch.out_cache_loc is not None
-        self.deepep_adapter.replay()
-
         # batch_size and num_seqs can be different in case there are finished examples
         # in the batch, which will not be counted as num_seqs
         raw_bs = forward_batch.batch_size
@@ -343,7 +332,6 @@ class EAGLEDraftExtendCudaGraphRunner:
         if bs * self.num_tokens_per_bs != num_tokens:
             self.seq_lens.fill_(self.seq_len_fill_value)
             self.out_cache_loc.zero_()
-            self.positions.zero_()
             self.accept_length.fill_(1)
             self.extend_seq_lens.fill_(1)
 

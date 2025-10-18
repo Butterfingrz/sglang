@@ -1,5 +1,3 @@
-use std::{borrow::Cow, collections::HashMap, time::Duration};
-
 use backoff::ExponentialBackoffBuilder;
 use dashmap::DashMap;
 use rmcp::{
@@ -15,6 +13,7 @@ use rmcp::{
     RoleClient, ServiceExt,
 };
 use serde::{Deserialize, Serialize};
+use std::{borrow::Cow, collections::HashMap, time::Duration};
 
 use crate::mcp::{
     config::{McpConfig, McpServerConfig, McpTransport},

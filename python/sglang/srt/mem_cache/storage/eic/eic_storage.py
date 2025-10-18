@@ -2,18 +2,21 @@ import json
 import logging
 import os
 import time
-from typing import Any, List, Optional, Tuple
+import uuid
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
 import eic
 import torch
 import yaml
 
+from sglang.srt.layers.dp_attention import get_attention_tp_rank, get_attention_tp_size
 from sglang.srt.mem_cache.hicache_storage import (
     HiCacheStorage,
     HiCacheStorageConfig,
     HiCacheStorageExtraInfo,
 )
-from sglang.srt.mem_cache.memory_pool_host import HostKVCache
+from sglang.srt.mem_cache.memory_pool_host import HostKVCache, MLATokenToKVPoolHost
 
 logger = logging.getLogger(__name__)
 
@@ -405,9 +408,7 @@ class EICStorage(HiCacheStorage):
         exist_num = self.batch_exists([key])
         return exist_num == 1
 
-    def batch_exists(
-        self, keys, extra_info: Optional[HiCacheStorageExtraInfo] = None
-    ) -> int:
+    def batch_exists(self, keys) -> int:
         if len(keys) == 0:
             return 0
         if self.use_zero_copy and not self.is_mla_model:

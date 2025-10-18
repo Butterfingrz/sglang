@@ -1,8 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
-
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Response identifier
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
@@ -12,23 +12,15 @@ impl ResponseId {
     pub fn new() -> Self {
         Self(ulid::Ulid::new().to_string())
     }
+
+    pub fn from_string(s: String) -> Self {
+        Self(s)
+    }
 }
 
 impl Default for ResponseId {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl From<String> for ResponseId {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for ResponseId {
-    fn from(value: &str) -> Self {
-        Self(value.to_string())
     }
 }
 
@@ -51,10 +43,10 @@ pub struct StoredResponse {
     pub output: String,
 
     /// Tool calls made by the model (if any)
-    pub tool_calls: Vec<Value>,
+    pub tool_calls: Vec<serde_json::Value>,
 
     /// Custom metadata
-    pub metadata: HashMap<String, Value>,
+    pub metadata: HashMap<String, serde_json::Value>,
 
     /// When this response was created
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -64,10 +56,6 @@ pub struct StoredResponse {
 
     /// Model used for generation
     pub model: Option<String>,
-
-    /// Conversation id if associated with a conversation
-    #[serde(default)]
-    pub conversation_id: Option<String>,
 
     /// Raw OpenAI response payload
     #[serde(default)]
@@ -87,7 +75,6 @@ impl StoredResponse {
             created_at: chrono::Utc::now(),
             user: None,
             model: None,
-            conversation_id: None,
             raw_response: Value::Null,
         }
     }
@@ -100,7 +87,7 @@ pub struct ResponseChain {
     pub responses: Vec<StoredResponse>,
 
     /// Metadata about the chain
-    pub metadata: HashMap<String, Value>,
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 impl Default for ResponseChain {

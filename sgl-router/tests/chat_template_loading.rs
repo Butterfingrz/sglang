@@ -1,11 +1,9 @@
 #[cfg(test)]
 mod tests {
+    use sglang_router_rs::protocols::spec;
+    use sglang_router_rs::tokenizer::chat_template::ChatTemplateParams;
+    use sglang_router_rs::tokenizer::huggingface::HuggingFaceTokenizer;
     use std::fs;
-
-    use sglang_router_rs::{
-        protocols::chat::{ChatMessage, UserMessageContent},
-        tokenizer::{chat_template::ChatTemplateParams, huggingface::HuggingFaceTokenizer},
-    };
     use tempfile::TempDir;
 
     #[test]
@@ -59,15 +57,18 @@ mod tests {
         )
         .unwrap();
 
-        let messages = [
-            ChatMessage::User {
-                content: UserMessageContent::Text("Hello".to_string()),
+        let messages = vec![
+            spec::ChatMessage::User {
+                role: "user".to_string(),
+                content: spec::UserMessageContent::Text("Hello".to_string()),
                 name: None,
             },
-            ChatMessage::Assistant {
+            spec::ChatMessage::Assistant {
+                role: "assistant".to_string(),
                 content: Some("Hi there".to_string()),
                 name: None,
                 tool_calls: None,
+                function_call: None,
                 reasoning_content: None,
             },
         ];
@@ -142,8 +143,9 @@ mod tests {
         )
         .unwrap();
 
-        let messages = [ChatMessage::User {
-            content: UserMessageContent::Text("Test".to_string()),
+        let messages = [spec::ChatMessage::User {
+            role: "user".to_string(),
+            content: spec::UserMessageContent::Text("Test".to_string()),
             name: None,
         }];
 
@@ -200,15 +202,18 @@ mod tests {
             "NEW: {% for msg in messages %}{{ msg.role }}: {{ msg.content }}; {% endfor %}";
         tokenizer.set_chat_template(new_template.to_string());
 
-        let messages = [
-            ChatMessage::User {
-                content: UserMessageContent::Text("Hello".to_string()),
+        let messages = vec![
+            spec::ChatMessage::User {
+                role: "user".to_string(),
+                content: spec::UserMessageContent::Text("Hello".to_string()),
                 name: None,
             },
-            ChatMessage::Assistant {
+            spec::ChatMessage::Assistant {
+                role: "assistant".to_string(),
                 content: Some("World".to_string()),
                 name: None,
                 tool_calls: None,
+                function_call: None,
                 reasoning_content: None,
             },
         ];

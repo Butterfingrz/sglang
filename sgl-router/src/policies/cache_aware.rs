@@ -59,14 +59,16 @@
     during the next eviction cycle.
 */
 
-use std::{sync::Arc, thread, time::Duration};
-
+use super::{get_healthy_worker_indices, CacheAwareConfig, LoadBalancingPolicy};
+use crate::core::Worker;
+use crate::metrics::RouterMetrics;
+use crate::tree::Tree;
 use dashmap::DashMap;
 use rand::Rng;
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 use tracing::debug;
-
-use super::{get_healthy_worker_indices, CacheAwareConfig, LoadBalancingPolicy};
-use crate::{core::Worker, metrics::RouterMetrics, tree::Tree};
 
 /// Cache-aware routing policy
 ///

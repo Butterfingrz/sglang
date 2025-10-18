@@ -1,12 +1,11 @@
 //! Factory for creating load balancing policies
 
-use std::sync::Arc;
-
 use super::{
     CacheAwareConfig, CacheAwarePolicy, LoadBalancingPolicy, PowerOfTwoPolicy, RandomPolicy,
     RoundRobinPolicy,
 };
 use crate::config::PolicyConfig;
+use std::sync::Arc;
 
 /// Factory for creating policy instances
 pub struct PolicyFactory;

@@ -1,12 +1,12 @@
 import logging
 import os
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 
 logger = logging.getLogger(__name__)
 
-
+#! 选择并创建 NIXL 的后端插件
 class NixlBackendSelection:
     """Handles NIXL backend selection and creation."""
 
@@ -82,7 +82,7 @@ class NixlBackendSelection:
             logger.error(f"Failed to create NIXL backend: {e}")
             return False
 
-
+#! 对接 NIXL agent，统一做“注册相关”的工作，包含构造注册描述、发起注册、以及构造查询所需的元组
 class NixlRegistration:
     """Handles NIXL memory registration."""
 
@@ -138,7 +138,7 @@ class NixlRegistration:
                 )
             return None
 
-
+#! 封装文件系统相关操作，服务于使用文件类后端（FILE）的场景
 class NixlFileManager:
     """Handles file system operations for NIXL."""
 

@@ -1,16 +1,13 @@
-use std::collections::HashMap;
-
 use clap::{ArgAction, Parser, ValueEnum};
-use sglang_router_rs::{
-    config::{
-        CircuitBreakerConfig, ConfigError, ConfigResult, ConnectionMode, DiscoveryConfig,
-        HealthCheckConfig, HistoryBackend, MetricsConfig, OracleConfig, PolicyConfig, RetryConfig,
-        RouterConfig, RoutingMode,
-    },
-    metrics::PrometheusConfig,
-    server::{self, ServerConfig},
-    service_discovery::ServiceDiscoveryConfig,
+use sglang_router_rs::config::{
+    CircuitBreakerConfig, ConfigError, ConfigResult, ConnectionMode, DiscoveryConfig,
+    HealthCheckConfig, HistoryBackend, MetricsConfig, OracleConfig, PolicyConfig, RetryConfig,
+    RouterConfig, RoutingMode,
 };
+use sglang_router_rs::metrics::PrometheusConfig;
+use sglang_router_rs::server::{self, ServerConfig};
+use sglang_router_rs::service_discovery::ServiceDiscoveryConfig;
+use std::collections::HashMap;
 
 fn parse_prefill_args() -> Vec<(String, Option<u16>)> {
     let args: Vec<String> = std::env::args().collect();
@@ -102,7 +99,7 @@ Examples:
 
 "#)]
 struct CliArgs {
-    #[arg(long, default_value = "0.0.0.0")]
+    #[arg(long, default_value = "127.0.0.1")]
     host: String,
 
     #[arg(long, default_value_t = 30000)]
@@ -186,7 +183,7 @@ struct CliArgs {
     #[arg(long, default_value_t = 29000)]
     prometheus_port: u16,
 
-    #[arg(long, default_value = "0.0.0.0")]
+    #[arg(long, default_value = "127.0.0.1")]
     prometheus_host: String,
 
     #[arg(long, num_args = 0..)]
@@ -195,17 +192,8 @@ struct CliArgs {
     #[arg(long, default_value_t = 1800)]
     request_timeout_secs: u64,
 
-    #[arg(long, default_value_t = -1)]
-    max_concurrent_requests: i32,
-
-    #[arg(long, default_value_t = 100)]
-    queue_size: usize,
-
-    #[arg(long, default_value_t = 60)]
-    queue_timeout_secs: u64,
-
-    #[arg(long)]
-    rate_limit_tokens_per_second: Option<i32>,
+    #[arg(long, default_value_t = 256)]
+    max_concurrent_requests: usize,
 
     #[arg(long, num_args = 0..)]
     cors_allowed_origins: Vec<String>,
@@ -267,9 +255,6 @@ struct CliArgs {
     #[arg(long)]
     tokenizer_path: Option<String>,
 
-    #[arg(long)]
-    chat_template: Option<String>,
-
     #[arg(long, default_value = "memory", value_parser = ["memory", "none", "oracle"])]
     history_backend: String,
 
@@ -296,12 +281,6 @@ struct CliArgs {
 
     #[arg(long, env = "ATP_POOL_TIMEOUT_SECS")]
     oracle_pool_timeout_secs: Option<u64>,
-
-    #[arg(long)]
-    reasoning_parser: Option<String>,
-
-    #[arg(long)]
-    tool_call_parser: Option<String>,
 }
 
 enum OracleConnectSource {
@@ -547,8 +526,8 @@ impl CliArgs {
                 Some(self.request_id_headers.clone())
             },
             max_concurrent_requests: self.max_concurrent_requests,
-            queue_size: self.queue_size,
-            queue_timeout_secs: self.queue_timeout_secs,
+            queue_size: 100,
+            queue_timeout_secs: 60,
             cors_allowed_origins: self.cors_allowed_origins.clone(),
             retry: RetryConfig {
                 max_retries: self.retry_max_retries,
@@ -573,14 +552,11 @@ impl CliArgs {
                 endpoint: self.health_check_endpoint.clone(),
             },
             enable_igw: self.enable_igw,
-            rate_limit_tokens_per_second: self.rate_limit_tokens_per_second,
+            rate_limit_tokens_per_second: None,
             model_path: self.model_path.clone(),
             tokenizer_path: self.tokenizer_path.clone(),
-            chat_template: self.chat_template.clone(),
             history_backend,
             oracle,
-            reasoning_parser: self.reasoning_parser.clone(),
-            tool_call_parser: self.tool_call_parser.clone(),
         })
     }
 
